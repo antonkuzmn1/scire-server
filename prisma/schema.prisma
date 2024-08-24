@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model User {
+  id      Int      @id @default(autoincrement())
+  created DateTime @default(now()) @db.Timestamp(0)
+  updated DateTime @updatedAt @db.Timestamp()
+  deleted Int      @default(0) @db.TinyInt()
+
+  username String @unique @db.Char(30)
+  password String @db.Char(60)
+  name     String @default("") @db.Char(100)
+  title    String @default("") @db.Char(255)
+
+  groups UserGroup[]
+  logs   Log[]
+}
+
+model Group {
+  id      Int      @id @default(autoincrement())
+  created DateTime @default(now()) @db.Timestamp(0)
+  updated DateTime @updatedAt @db.Timestamp()
+  deleted Int      @default(0) @db.TinyInt()
+
+  name  String @unique @db.Char(50)
+  title String @default("") @db.Char(255)
+
+  users UserGroup[]
+  logs  Log[]
+}
+
+model UserGroup {
+  userId  Int
+  groupId Int
+  created DateTime @default(now()) @db.Timestamp(0)
+
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@id([userId, groupId])
+}
+
+model Log {
+  id      Int      @id @default(autoincrement())
+  created DateTime @default(now()) @db.Timestamp(0)
+
+  action   String @db.Char(100)
+  newValue Json?
+
+  userId  Int?
+  groupId Int?
+
+  user  User?  @relation(fields: [userId], references: [id])
+  group Group? @relation(fields: [groupId], references: [id])
+}
