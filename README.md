@@ -1,4 +1,4 @@
-# storage-server
+# scire-server
 
 
 # quick start:
