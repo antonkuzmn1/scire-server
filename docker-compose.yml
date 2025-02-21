@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  fastapi:
+    image: antonkuzmn1/scire-server
+    env_file:
+      - .env
+    container_name: scire-server
+    build: .
+    ports:
+      - "3007:80"
+    restart: always
