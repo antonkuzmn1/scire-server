@@ -1,5 +1,0 @@
-.env
-prisma/migrations
-combined.log
-dist
-/node_modules/
