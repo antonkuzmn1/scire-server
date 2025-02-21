@@ -79,8 +79,10 @@ class BaseRepository(Generic[T, D]):
 
         return item
 
-    async def get_files_by_item_id(self, item_id: int) -> List[D]:
+    async def get_files_by_item_id(self, item_id: int, *filters) -> List[D]:
         base_filters = [self.model_file.item_id == item_id]
+        if filters:
+            base_filters.extend(filters)
         stmt = select(self.model).where(*base_filters)
         return await self.db.scalar(stmt)
 
