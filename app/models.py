@@ -18,10 +18,10 @@ class Ticket(Base):
     deleted = Column(Boolean, nullable=False, default=False)
 
 
-class TicketsFiles(Base):
-    __tablename__ = 'tickets_files'
+class TicketFile(Base):
+    __tablename__ = 'ticket_files'
 
-    ticket_id = Column(Integer, ForeignKey('tickets.id', ondelete="CASCADE"), primary_key=True)
+    item_id = Column(Integer, ForeignKey('tickets.id', ondelete="CASCADE"), primary_key=True)
     file_uuid = Column(String(36), primary_key=True, nullable=False)
     file_name = Column(String(255), nullable=False)
     file_size = Column(BigInteger, nullable=False)
@@ -44,10 +44,10 @@ class Message(Base):
     deleted = Column(Boolean, nullable=False, default=False)
 
 
-class MessagesFiles(Base):
-    __tablename__ = 'messages_files'
+class MessageFile(Base):
+    __tablename__ = 'message_files'
 
-    message_id = Column(Integer, ForeignKey('messages.id', ondelete="CASCADE"), primary_key=True)
+    item_id = Column(Integer, ForeignKey('messages.id', ondelete="CASCADE"), primary_key=True)
     file_uuid = Column(String(36), primary_key=True, nullable=False)
     file_name = Column(String(255), nullable=False)
     file_size = Column(BigInteger, nullable=False)
