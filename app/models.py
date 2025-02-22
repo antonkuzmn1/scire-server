@@ -17,6 +17,7 @@ class Ticket(Base):
     updated_at = Column(DateTime, onupdate=func.now())
     deleted = Column(Boolean, nullable=False, default=False)
     messages = relationship("Message", back_populates="ticket", cascade="all, delete")
+    files = relationship("TicketFile", back_populates="ticket", cascade="all, delete")
 
 
 class TicketFile(Base):
@@ -26,6 +27,7 @@ class TicketFile(Base):
     file_uuid = Column(String(36), primary_key=True, nullable=False)
     file_name = Column(String(255), nullable=False)
     file_size = Column(BigInteger, nullable=False)
+    ticket = relationship("Ticket", back_populates="files")
 
 
 class Message(Base):
@@ -44,6 +46,7 @@ class Message(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     deleted = Column(Boolean, nullable=False, default=False)
+    files = relationship("MessageFile", back_populates="message", cascade="all, delete")
 
 
 class MessageFile(Base):
@@ -53,3 +56,4 @@ class MessageFile(Base):
     file_uuid = Column(String(36), primary_key=True, nullable=False)
     file_name = Column(String(255), nullable=False)
     file_size = Column(BigInteger, nullable=False)
+    message = relationship("Message", back_populates="files")
