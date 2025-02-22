@@ -5,7 +5,6 @@ from fastapi import APIRouter, WebSocket, Depends, WebSocketDisconnect
 
 from app.dependencies.services import get_ticket_service, get_message_service
 from app.logger import logger
-from app.models import Ticket
 from app.schemas.message import MessageCreate, MessageFileCreate
 from app.schemas.ticket import TicketCreate, TicketFileCreate, TicketUpdate
 from app.services.message_service import MessageService
