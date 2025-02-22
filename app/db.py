@@ -5,7 +5,7 @@ from app.settings import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=True,
+    echo=False,
     pool_size=20,
     max_overflow=10,
     pool_pre_ping=True
