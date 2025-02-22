@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.ws import router
+from app.ws import router as ws_router
+from app.api.tickets import router as tickets_router
 from app.settings import settings
 
 
@@ -13,7 +14,8 @@ async def lifespan(_app: FastAPI):
     print("Server stopped!")
 app = FastAPI(lifespan=lifespan)
 
-app.include_router(router)
+app.include_router(ws_router)
+app.include_router(tickets_router)
 
 app.add_middleware(
     CORSMiddleware,

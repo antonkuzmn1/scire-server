@@ -45,8 +45,8 @@ class TicketOut(TicketBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    messages: list[MessageOut] = []
-    files: list[TicketFileOut] = []
+    # messages: list[MessageOut] = []
+    # files: list[TicketFileOut] = []
 
     class Config:
         from_attributes = True
