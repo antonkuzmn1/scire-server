@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Boolean, BigInteger
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -16,6 +16,7 @@ class Ticket(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     deleted = Column(Boolean, nullable=False, default=False)
+    messages = relationship("Message", back_populates="ticket", cascade="all, delete")
 
 
 class TicketFile(Base):
@@ -35,6 +36,7 @@ class Message(Base):
     user_id = Column(Integer, nullable=False)
     admin_id = Column(Integer, nullable=True, default=None)
     ticket_id = Column(Integer, ForeignKey('tickets.id', ondelete="CASCADE"))
+    ticket = relationship("Ticket", back_populates="messages")
     admin_connected = Column(Boolean, nullable=False, default=False)
     admin_disconnected = Column(Boolean, nullable=False, default=False)
     in_progress = Column(Boolean, nullable=False, default=False)
