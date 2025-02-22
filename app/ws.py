@@ -275,17 +275,270 @@ async def websocket_endpoint(
                 case "admin":
                     match action:
                         case "assign_ticket":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+                            item_id = data["item_id"]
+                            ticket_old = await ticket_service.get_by_id(item_id)
+                            if not ticket_old:
+                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                return
+                            user = users_connections[ticket_old['user_id']][1]
+                            user_ws = users_connections[ticket_old['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            ticket = TicketUpdate(
+                                title=ticket_old.title,
+                                description=ticket_old.description,
+                                status=ticket_old.status,
+                                user_id=ticket_old.user_id,
+                                admin_id=admin_id,
+                            )
+                            record = await ticket_service.update(item_id, ticket)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            message = MessageCreate(
+                                text='',
+                                user_id=user.id,
+                                ticket_id=record.id,
+                                admin_id=admin_id,
+                                admin_connected=True,
+                            )
+                            message_record = await message_service.create(message)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            return
                         case "set_ticket_status_pending":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+                            item_id = data["item_id"]
+                            ticket_old = await ticket_service.get_by_id(item_id)
+                            if not ticket_old:
+                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                return
+                            user = users_connections[ticket_old['user_id']][1]
+                            user_ws = users_connections[ticket_old['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            ticket = TicketUpdate(
+                                title=ticket_old.title,
+                                description=ticket_old.description,
+                                status=0,
+                                user_id=ticket_old.user_id,
+                                admin_id=ticket_old.admin_id,
+                            )
+                            record = await ticket_service.update(item_id, ticket)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            message = MessageCreate(
+                                text='',
+                                user_id=user.id,
+                                ticket_id=record.id,
+                                admin_id=admin_id,
+                            )
+                            message_record = await message_service.create(message)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            return
                         case "set_ticket_status_in_progress":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+                            item_id = data["item_id"]
+                            ticket_old = await ticket_service.get_by_id(item_id)
+                            if not ticket_old:
+                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                return
+                            user = users_connections[ticket_old['user_id']][1]
+                            user_ws = users_connections[ticket_old['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            ticket = TicketUpdate(
+                                title=ticket_old.title,
+                                description=ticket_old.description,
+                                status=1,
+                                user_id=ticket_old.user_id,
+                                admin_id=ticket_old.admin_id,
+                            )
+                            record = await ticket_service.update(item_id, ticket)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            message = MessageCreate(
+                                text='',
+                                user_id=user.id,
+                                ticket_id=record.id,
+                                admin_id=admin_id,
+                                in_progress=True,
+                            )
+                            message_record = await message_service.create(message)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            return
                         case "set_ticket_status_closed":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+                            item_id = data["item_id"]
+                            ticket_old = await ticket_service.get_by_id(item_id)
+                            if not ticket_old:
+                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                return
+                            user = users_connections[ticket_old['user_id']][1]
+                            user_ws = users_connections[ticket_old['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            ticket = TicketUpdate(
+                                title=ticket_old.title,
+                                description=ticket_old.description,
+                                status=2,
+                                user_id=ticket_old.user_id,
+                                admin_id=ticket_old.admin_id,
+                            )
+                            record = await ticket_service.update(item_id, ticket)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            message = MessageCreate(
+                                text='',
+                                user_id=user.id,
+                                ticket_id=record.id,
+                                admin_id=admin_id,
+                                solved=True,
+                            )
+                            message_record = await message_service.create(message)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                            return
                         case "send_message":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+                            text = data["text"]
+                            user_id = data["user_id"]
+                            ticket_id = data["ticket_id"]
+                            ticket_old = await ticket_service.get_by_id(ticket_id)
+                            if not ticket_old:
+                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                return
+                            user = users_connections[ticket_old['user_id']][1]
+                            user_ws = users_connections[ticket_old['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            message = MessageCreate(
+                                text=text,
+                                user_id=user_id,
+                                ticket_id=ticket_id,
+                                admin_id=admin_id,
+                            )
+                            record = await message_service.create(message)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            return
                         case "add_file_to_message":
-                            print(payload)
+                            admin_id = account_id
+                            admin = admins_connections[admin_id][1]
+                            admin_ws = admins_connections[admin_id][0]
+                            admin_companies = admin["companies"]
+                            admin_companies_ids = [company['id'] for company in admin_companies]
+
+                            item_id = data["item_id"]
+                            message = await message_service.get_by_id(item_id)
+                            if not message:
+                                admin_ws.send(json.dumps({"action": action, "error": "Message not found"}))
+                                return
+                            user = users_connections[message['user_id']][1]
+                            user_ws = users_connections[message['user_id']][0]
+                            company_id = user["company_id"]
+                            if user.company_id not in admin_companies_ids:
+                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            file_uuid = data["file_uuid"]
+                            file_name = data["file_name"]
+                            file_size = data["file_size"]
+                            message_file = MessageFileCreate(
+                                item_id=item_id,
+                                file_uuid=file_uuid,
+                                file_name=file_name,
+                                file_size=file_size,
+                            )
+                            record = await message_service.add_file(message_file)
+                            for i in admins_connections:
+                                admin_ws = users_connections[i][0]
+                                admin = users_connections[i][1]
+                                admin_companies = admin["companies"]
+                                admin_companies_ids = [company['id'] for company in admin_companies]
+                                if company_id in admin_companies_ids:
+                                    admin_ws.send(json.dumps({"action": action, "data": record}))
+                            user_ws.send(json.dumps({"action": action, "data": record}))
+                            return
                         case _:
                             await websocket.close(code=1008, reason=f"Unexpected message: {payload}")
                 case _:
