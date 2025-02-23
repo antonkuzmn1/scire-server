@@ -164,14 +164,20 @@ async def websocket_endpoint(
                                 file_size=file_size,
                             )
                             record = await ticket_service.add_file(ticket_file)
+                            record_dict = {
+                                "item_id": record.item_id,
+                                "file_uuid": record.file_uuid,
+                                "file_name": record.file_name,
+                                "file_size": record.file_size,
+                            }
                             for i in admins_connections:
                                 admin_ws = users_connections[i][0]
                                 admin = users_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": action, "data": record}))
-                            user_ws.send(json.dumps({"action": action, "data": record}))
+                                    await admin_ws.send_json({"action": action, "data": record_dict})
+                            await user_ws.send_json({"action": action, "data": record_dict})
                         case "close_ticket":
                             user_id = account_id
                             user = users_connections[user_id][1]

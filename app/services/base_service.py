@@ -50,12 +50,12 @@ class BaseService(Generic[T]):
             return self.schema_out.model_validate(record)
         return None
 
-    async def get_files_by_item_id(self, item_id: int, *filters) -> List[SchemaOut]:
+    async def get_files_by_item_id(self, item_id: int, *filters) -> List[SchemaFileOut]:
         records = await self.repository.get_files_by_item_id(item_id, *filters)
         return self.schema_out.model_validate(records)
 
-    async def add_file(self, file_data: SchemaFileBase) -> List[SchemaOut]:
+    async def add_file(self, file_data: SchemaFileBase) -> List[SchemaFileOut]:
         if not isinstance(file_data, dict):
             file_data = file_data.model_dump()
         record = await self.repository.add_file(file_data)
-        return self.schema_file_out.model_validate(record)
+        return self.schema_file_out.model_validate(record.__dict__)
