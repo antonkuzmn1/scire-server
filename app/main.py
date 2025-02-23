@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.ws import router as ws_router
 from app.api.tickets import router as tickets_router
+from app.api.messages import router as messages_router
 from app.settings import settings
 
 
@@ -16,6 +17,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(ws_router)
 app.include_router(tickets_router)
+app.include_router(messages_router)
 
 app.add_middleware(
     CORSMiddleware,
