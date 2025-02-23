@@ -125,5 +125,5 @@ class TicketService(BaseService[TicketRepository]):
         return None
 
     async def get_by_id_by_user(self, ticket_id: int, user_id: int):
-        filters = [Ticket.user_id == user_id, Ticket.id == ticket_id]
-        return await super().get_all(*filters)
+        filters = [Ticket.user_id == user_id]
+        return await super().get_by_id(ticket_id, *filters)

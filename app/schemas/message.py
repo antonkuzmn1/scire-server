@@ -46,7 +46,7 @@ class MessageOut(MessageBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    files: list[MessageFileOut] = []
+    # files: list[MessageFileOut] = []
 
     class Config:
         from_attributes = True
