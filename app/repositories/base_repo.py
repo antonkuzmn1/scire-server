@@ -84,7 +84,7 @@ class BaseRepository(Generic[T, D]):
         if filters:
             base_filters.extend(filters)
         stmt = select(self.model_file).where(*base_filters)
-        return await self.db.scalar(stmt)
+        return list(await self.db.scalars(stmt))
 
     async def add_file(self, file_data: dict) -> Optional[D]:
         file = self.model_file(**file_data)
