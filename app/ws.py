@@ -186,10 +186,10 @@ async def websocket_endpoint(
                             item_id = data["item_id"]
                             ticket_old = await ticket_service.get_by_id(item_id)
                             if not ticket_old:
-                                user_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                await user_ws.send_json({"action": action, "error": "Ticket not found"})
                                 return
                             if ticket_old.user_id != user_id:
-                                user_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                                await user_ws.send_json({"action": action, "error": "Access denied"})
                             ticket = TicketUpdate(
                                 title=ticket_old.title,
                                 description=ticket_old.description,
@@ -198,14 +198,22 @@ async def websocket_endpoint(
                                 admin_id=ticket_old.admin_id
                             )
                             record = await ticket_service.update(item_id, ticket)
+                            record_dict = {
+                                "title": record.title,
+                                "description": record.description,
+                                "status": record.status,
+                                "user_id": record.user_id,
+                                "id": record.id,
+                                "created_at": record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
                                 admin_ws = users_connections[i][0]
                                 admin = users_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": action, "data": record}))
-                            user_ws.send(json.dumps({"action": action, "data": record}))
+                                    await admin_ws.send_json({"action": action, "data": record_dict})
+                            await user_ws.send_json({"action": action, "data": record_dict})
                             message = MessageCreate(
                                 text='',
                                 user_id=user_id,
@@ -213,14 +221,26 @@ async def websocket_endpoint(
                                 solved=True,
                             )
                             message_record = await message_service.create(message)
+                            message_record_dict = {
+                                "id": message_record.id,
+                                "text": message_record.text,
+                                "user_id": message_record.user_id,
+                                "admin_id": message_record.admin_id,
+                                "ticket_id": message_record.ticket_id,
+                                "admin_connected": message_record.admin_connected,
+                                "admin_disconnected": message_record.admin_disconnected,
+                                "in_progress": message_record.in_progress,
+                                "solved": message_record.solved,
+                                "created_at": message_record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
                                 admin_ws = users_connections[i][0]
                                 admin = users_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
-                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                                    await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
+                            await user_ws.send_json({"action": "send_message", "data": message_record_dict})
                         case "send_message":
                             user_id = account_id
                             user = users_connections[user_id][1]
