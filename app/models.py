@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Boolean, BigInteger
+from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import declarative_base, relationship
 
-Base = declarative_base()
+Base = declarative_base(cls=AsyncAttrs)
 
 
 class Ticket(Base):

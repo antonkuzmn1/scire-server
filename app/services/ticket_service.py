@@ -127,3 +127,15 @@ class TicketService(BaseService[TicketRepository]):
     async def get_by_id_by_user(self, ticket_id: int, user_id: int):
         filters = [Ticket.user_id == user_id]
         return await super().get_by_id(ticket_id, *filters)
+
+    async def get_files_by_ticket_by_admin(self, ticket_id: int):
+        ticket = await self.get_by_id_by_admin(ticket_id)
+        if not ticket:
+            return []
+        return await super().get_files_by_item_id(ticket.id)
+
+    async def get_files_by_ticket_by_user(self, ticket_id: int, user_id: int):
+        ticket = await self.get_by_id_by_user(ticket_id, user_id)
+        if not ticket:
+            return []
+        return await super().get_files_by_item_id(ticket.id)

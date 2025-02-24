@@ -52,7 +52,10 @@ class BaseService(Generic[T]):
 
     async def get_files_by_item_id(self, item_id: int, *filters) -> List[SchemaFileOut]:
         records = await self.repository.get_files_by_item_id(item_id, *filters)
-        return self.schema_out.model_validate(records)
+        if isinstance(records, list):
+            return [self.schema_file_out.model_validate(record.__dict__) for record in records]
+        else:
+            return [self.schema_file_out.model_validate(records.__dict__)]
 
     async def add_file(self, file_data: SchemaFileBase) -> List[SchemaFileOut]:
         if not isinstance(file_data, dict):

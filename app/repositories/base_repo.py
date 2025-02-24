@@ -1,11 +1,11 @@
 from typing import Type, TypeVar, Generic, Optional, List
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.logger import logger
-from app.models import Base, TicketFile
+from app.models import Base
 
 T = TypeVar("T", bound=Base)
 D = TypeVar("D", bound=Base)
@@ -83,7 +83,7 @@ class BaseRepository(Generic[T, D]):
         base_filters = [self.model_file.item_id == item_id]
         if filters:
             base_filters.extend(filters)
-        stmt = select(self.model).where(*base_filters)
+        stmt = select(self.model_file).where(*base_filters)
         return await self.db.scalar(stmt)
 
     async def add_file(self, file_data: dict) -> Optional[D]:
