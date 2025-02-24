@@ -240,14 +240,26 @@ async def websocket_endpoint(
                                 ticket_id=ticket_id,
                             )
                             record = await message_service.create(message)
+                            record_dict = {
+                                "id": record.id,
+                                "text": record.text,
+                                "user_id": record.user_id,
+                                "admin_id": record.admin_id,
+                                "ticket_id": record.ticket_id,
+                                "admin_connected": record.admin_connected,
+                                "admin_disconnected": record.admin_disconnected,
+                                "in_progress": record.in_progress,
+                                "solved": record.solved,
+                                "created_at": record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
                                 admin_ws = users_connections[i][0]
                                 admin = users_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": action, "data": record}))
-                            user_ws.send(json.dumps({"action": action, "data": record}))
+                                    await admin_ws.send_json({"action": action, "data": record_dict})
+                            await user_ws.send_json({"action": action, "data": record_dict})
                         case "add_file_to_message":
                             user_id = account_id
                             user = users_connections[user_id][1]
