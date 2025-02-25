@@ -322,14 +322,30 @@ async def websocket_endpoint(
                             admin_companies_ids = [company['id'] for company in admin_companies]
                             item_id = data["item_id"]
                             ticket_old = await ticket_service.get_by_id(item_id)
+                            user = None
                             if not ticket_old:
-                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                await admin_ws.send_json({"action": action, "error": "Ticket not found"})
                                 return
-                            user = users_connections[ticket_old['user_id']][1]
-                            user_ws = users_connections[ticket_old['user_id']][0]
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.get(
+                                        f"{settings.OAUTH_CHECK_URL}/users/{ticket_old.user_id}",
+                                        headers={"Authorization": f"Bearer {token}"},
+                                        timeout=3.0
+                                    )
+                                    response.raise_for_status()
+                                    user = response.json()
+                            except httpx.HTTPStatusError as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            except httpx.RequestError as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            except Exception as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            if not user:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
                             company_id = user["company_id"]
-                            if user.company_id not in admin_companies_ids:
-                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            if user['company_id'] not in admin_companies_ids:
+                                await admin_ws.send_json({"action": action, "error": "Access denied"})
                             ticket = TicketUpdate(
                                 title=ticket_old.title,
                                 description=ticket_old.description,
@@ -338,30 +354,55 @@ async def websocket_endpoint(
                                 admin_id=admin_id,
                             )
                             record = await ticket_service.update(item_id, ticket)
+                            record_dict = {
+                                "title": record.title,
+                                "description": record.description,
+                                "status": record.status,
+                                "user_id": record.user_id,
+                                "id": record.id,
+                                "created_at": record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
-                                admin_ws = users_connections[i][0]
-                                admin = users_connections[i][1]
+                                admin_ws = admins_connections[i][0]
+                                admin = admins_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": action, "data": record}))
-                            user_ws.send(json.dumps({"action": action, "data": record}))
+                                    await admin_ws.send_json({"action": action, "data": record_dict})
+                            if users_connections.get(record.user_id):
+                                user_ws = users_connections[record.user_id][0]
+                                if user_ws:
+                                    await user_ws.send_json({"action": action, "data": record_dict})
                             message = MessageCreate(
                                 text='',
-                                user_id=user.id,
+                                user_id=user['id'],
                                 ticket_id=record.id,
                                 admin_id=admin_id,
                                 admin_connected=True,
                             )
                             message_record = await message_service.create(message)
+                            message_record_dict = {
+                                "id": message_record.id,
+                                "text": message_record.text,
+                                "user_id": message_record.user_id,
+                                "admin_id": message_record.admin_id,
+                                "ticket_id": message_record.ticket_id,
+                                "admin_connected": message_record.admin_connected,
+                                "admin_disconnected": message_record.admin_disconnected,
+                                "in_progress": message_record.in_progress,
+                                "solved": message_record.solved,
+                                "created_at": message_record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
-                                admin_ws = users_connections[i][0]
-                                admin = users_connections[i][1]
+                                admin_ws = admins_connections[i][0]
+                                admin = admins_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": "send_message", "data": message_record}))
-                            user_ws.send(json.dumps({"action": "send_message", "data": message_record}))
+                                    await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
+                            if users_connections.get(message_record_dict['user_id']):
+                                user_ws = users_connections[message_record.user_id][0]
+                                await user_ws.send_json({"action": "send_message", "data": message_record_dict})
                             return
                         case "set_ticket_status_pending":
                             admin_id = account_id
@@ -520,13 +561,32 @@ async def websocket_endpoint(
                             ticket_id = data["ticket_id"]
                             ticket_old = await ticket_service.get_by_id(ticket_id)
                             if not ticket_old:
-                                admin_ws.send(json.dumps({"action": action, "error": "Ticket not found"}))
+                                await admin_ws.send_json({"action": action, "error": "Ticket not found"})
                                 return
-                            user = users_connections[ticket_old['user_id']][1]
-                            user_ws = users_connections[ticket_old['user_id']][0]
+                            user = None
+                            if not ticket_old:
+                                await admin_ws.send_json({"action": action, "error": "Ticket not found"})
+                                return
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.get(
+                                        f"{settings.OAUTH_CHECK_URL}/users/{ticket_old.user_id}",
+                                        headers={"Authorization": f"Bearer {token}"},
+                                        timeout=3.0
+                                    )
+                                    response.raise_for_status()
+                                    user = response.json()
+                            except httpx.HTTPStatusError as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            except httpx.RequestError as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            except Exception as e:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
+                            if not user:
+                                await admin_ws.send_json({"action": action, "error": "Cannot get user"})
                             company_id = user["company_id"]
-                            if user.company_id not in admin_companies_ids:
-                                admin_ws.send(json.dumps({"action": action, "error": "Access denied"}))
+                            if user['company_id'] not in admin_companies_ids:
+                                await admin_ws.send_json({"action": action, "error": "Access denied"})
                             message = MessageCreate(
                                 text=text,
                                 user_id=user_id,
@@ -534,15 +594,29 @@ async def websocket_endpoint(
                                 admin_id=admin_id,
                             )
                             record = await message_service.create(message)
+                            record_dict = {
+                                "id": record.id,
+                                "text": record.text,
+                                "user_id": record.user_id,
+                                "admin_id": record.admin_id,
+                                "ticket_id": record.ticket_id,
+                                "admin_connected": record.admin_connected,
+                                "admin_disconnected": record.admin_disconnected,
+                                "in_progress": record.in_progress,
+                                "solved": record.solved,
+                                "created_at": record.created_at.isoformat(),
+                            }
                             for i in admins_connections:
-                                admin_ws = users_connections[i][0]
-                                admin = users_connections[i][1]
+                                admin_ws = admins_connections[i][0]
+                                admin = admins_connections[i][1]
                                 admin_companies = admin["companies"]
                                 admin_companies_ids = [company['id'] for company in admin_companies]
                                 if company_id in admin_companies_ids:
-                                    admin_ws.send(json.dumps({"action": action, "data": record}))
-                            user_ws.send(json.dumps({"action": action, "data": record}))
-                            return
+                                    await admin_ws.send_json({"action": action, "data": record_dict})
+                            if users_connections.get(record.user_id):
+                                user_ws = users_connections[record.user_id][0]
+                                if user_ws:
+                                    await user_ws.send_json({"action": action, "data": record_dict})
                         case "add_file_to_message":
                             admin_id = account_id
                             admin = admins_connections[admin_id][1]
