@@ -100,6 +100,9 @@ async def websocket_endpoint(
             await websocket.close(code=1008, reason=f"Incorrect role: {role}")
             return
 
+    print(users_connections)
+    print(admins_connections)
+
     logger.info(f"Client connected: {websocket.client}")
 
     try:
@@ -193,16 +196,16 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {websocket.client}")
-        if account_id in users_connections:
+        if account_id in users_connections and role == "user":
             del users_connections[account_id]
-        if account_id in admins_connections:
+        if account_id in admins_connections and role == "admin":
             del admins_connections[account_id]
 
     except Exception as e:
         logger.warning(f"Error WebSocket: {e}")
-        if account_id in users_connections:
+        if account_id in users_connections and role == "user":
             del users_connections[account_id]
-        if account_id in admins_connections:
+        if account_id in admins_connections and role == "admin":
             del admins_connections[account_id]
         await websocket.close()
 
@@ -323,6 +326,7 @@ async def user_close_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
+    print(admins_connections)
     for admin_ws, admin in admins_connections.values():
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "close_ticket", "data": record_dict})
@@ -351,6 +355,7 @@ async def user_close_ticket(
         "created_at": message_record.created_at.isoformat(),
     }
 
+    print(admins_connections)
     for admin_ws, admin in admins_connections.values():
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
