@@ -195,11 +195,15 @@ async def websocket_endpoint(
         logger.info(f"Client disconnected: {websocket.client}")
         if account_id in users_connections:
             del users_connections[account_id]
+        if account_id in admins_connections:
+            del admins_connections[account_id]
 
     except Exception as e:
         logger.warning(f"Error WebSocket: {e}")
         if account_id in users_connections:
             del users_connections[account_id]
+        if account_id in admins_connections:
+            del admins_connections[account_id]
         await websocket.close()
 
 
