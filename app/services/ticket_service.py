@@ -41,7 +41,7 @@ class TicketService(BaseService[TicketRepository]):
         admin_companies = profile["companies"]
         admin_companies_ids = [company['id'] for company in admin_companies]
 
-        all_tickets = await super().get_all()
+        all_tickets = await super().get_all(Ticket.status != 2)
         filtered_tickets = []
         for ticket in all_tickets:
             user_id = ticket.user_id
