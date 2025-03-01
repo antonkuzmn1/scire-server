@@ -139,6 +139,13 @@ async def websocket_endpoint(
                                 message_service,
                                 data['item_id'],
                             )
+                        case "reopen_ticket":
+                            await user_reopen_ticket(
+                                account_id,
+                                ticket_service,
+                                message_service,
+                                data['item_id'],
+                            )
                         case "send_message":
                             await user_send_message(
                                 account_id,
@@ -362,6 +369,79 @@ async def user_close_ticket(
 
     await account_ws.send_json({"action": "send_message", "data": message_record_dict})
 
+
+async def user_reopen_ticket(
+        account_id: int,
+        ticket_service: TicketService,
+        message_service: MessageService,
+        item_id: int,
+):
+    account = users_connections[account_id][1]
+    account_ws = users_connections[account_id][0]
+    company_id = account["company_id"]
+
+    ticket_old = await ticket_service.get_by_id(item_id)
+    if not ticket_old:
+        await account_ws.send_json({"action": "reopen_ticket", "error": "Ticket not found"})
+        return
+    if ticket_old.user_id != account_id:
+        await account_ws.send_json({"action": "reopen_ticket", "error": "Access denied"})
+        return
+
+    ticket = TicketUpdate(
+        title=ticket_old.title,
+        description=ticket_old.description,
+        status=0,
+        user_id=ticket_old.user_id,
+        admin_id=ticket_old.admin_id
+    )
+
+    record = await ticket_service.update(item_id, ticket)
+
+    record_dict = {
+        "title": record.title,
+        "description": record.description,
+        "status": record.status,
+        "user_id": record.user_id,
+        "admin_id": record.admin_id,
+        "id": record.id,
+        "created_at": record.created_at.isoformat(),
+    }
+
+    print(admins_connections)
+    for admin_ws, admin in admins_connections.values():
+        if company_id in {company['id'] for company in admin['companies']}:
+            await admin_ws.send_json({"action": "reopen_ticket", "data": record_dict})
+
+    await account_ws.send_json({"action": "reopen_ticket", "data": record_dict})
+
+    message = MessageCreate(
+        text='',
+        user_id=account_id,
+        ticket_id=record.id,
+    )
+
+    message_record = await message_service.create(message)
+
+    message_record_dict = {
+        "id": message_record.id,
+        "text": message_record.text,
+        "user_id": message_record.user_id,
+        "admin_id": message_record.admin_id,
+        "ticket_id": message_record.ticket_id,
+        "admin_connected": message_record.admin_connected,
+        "admin_disconnected": message_record.admin_disconnected,
+        "in_progress": message_record.in_progress,
+        "solved": message_record.solved,
+        "created_at": message_record.created_at.isoformat(),
+    }
+
+    print(admins_connections)
+    for admin_ws, admin in admins_connections.values():
+        if company_id in {company['id'] for company in admin['companies']}:
+            await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
+
+    await account_ws.send_json({"action": "send_message", "data": message_record_dict})
 
 async def user_send_message(
         account_id: int,
