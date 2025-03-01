@@ -75,9 +75,6 @@ async def websocket_endpoint(
             except Exception as e:
                 await websocket.close(code=1008, reason=f"Unexpected error: {str(e)}")
                 return
-            if users_connections.get(account_id) is not None:
-                old_ws_session = users_connections[account_id][0]
-                old_ws_session.close()
             users_connections[account_id] = (websocket, profile)
         case "admin":
             try:
@@ -98,9 +95,6 @@ async def websocket_endpoint(
             except Exception as e:
                 await websocket.close(code=1008, reason=f"Unexpected error: {str(e)}")
                 return
-            if admins_connections.get(account_id) is not None:
-                old_ws_session = admins_connections[account_id][0]
-                old_ws_session.close()
             admins_connections[account_id] = (websocket, profile)
         case _:
             await websocket.close(code=1008, reason=f"Incorrect role: {role}")
