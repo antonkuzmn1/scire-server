@@ -13,8 +13,8 @@ from app.settings import settings
 
 router = APIRouter(tags=["WebSocket"])
 
-users_connections = {}
-admins_connections = {}
+users_connections = []
+admins_connections = []
 
 
 @router.websocket("/")
@@ -75,7 +75,7 @@ async def websocket_endpoint(
             except Exception as e:
                 await websocket.close(code=1008, reason=f"Unexpected error: {str(e)}")
                 return
-            users_connections[account_id] = (websocket, profile)
+            users_connections.append((websocket, profile))
         case "admin":
             try:
                 async with httpx.AsyncClient() as client:
@@ -95,7 +95,7 @@ async def websocket_endpoint(
             except Exception as e:
                 await websocket.close(code=1008, reason=f"Unexpected error: {str(e)}")
                 return
-            admins_connections[account_id] = (websocket, profile)
+            admins_connections.append((websocket, profile))
         case _:
             await websocket.close(code=1008, reason=f"Incorrect role: {role}")
             return
@@ -203,22 +203,22 @@ async def websocket_endpoint(
                             pass
                         case _:
                             await websocket.close(code=1008, reason=f"Unexpected message: {payload}")
+                            users_connections[:] = [conn for conn in users_connections if conn[0] != websocket]
+                            admins_connections[:] = [conn for conn in admins_connections if conn[0] != websocket]
                 case _:
                     await websocket.close(code=1008, reason=f"Incorrect role: {role}")
+                    users_connections[:] = [conn for conn in users_connections if conn[0] != websocket]
+                    admins_connections[:] = [conn for conn in admins_connections if conn[0] != websocket]
 
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {websocket.client}")
-        if account_id in users_connections and role == "user":
-            del users_connections[account_id]
-        if account_id in admins_connections and role == "admin":
-            del admins_connections[account_id]
+        users_connections[:] = [conn for conn in users_connections if conn[0] != websocket]
+        admins_connections[:] = [conn for conn in admins_connections if conn[0] != websocket]
 
     except Exception as e:
         logger.warning(f"Error WebSocket: {e}")
-        if account_id in users_connections and role == "user":
-            del users_connections[account_id]
-        if account_id in admins_connections and role == "admin":
-            del admins_connections[account_id]
+        users_connections[:] = [conn for conn in users_connections if conn[0] != websocket]
+        admins_connections[:] = [conn for conn in admins_connections if conn[0] != websocket]
         await websocket.close()
 
 
@@ -228,8 +228,7 @@ async def user_create_ticket(
         title: str,
         description: str
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     ticket = TicketCreate(
@@ -249,11 +248,13 @@ async def user_create_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "create_ticket", "data": record_dict})
 
-    await account_ws.send_json({"action": "create_ticket", "data": record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "create_ticket", "data": record_dict})
 
 
 async def user_add_file_to_ticket(
@@ -264,16 +265,19 @@ async def user_add_file_to_ticket(
         file_name: str,
         file_size: int
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     ticket = await ticket_service.get_by_id(item_id)
     if not ticket:
-        await account_ws.send_json({"action": "add_file_to_ticket", "error": "Ticket not found"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "add_file_to_ticket", "error": "Ticket not found"})
         return
     if ticket.user_id != account_id:
-        await account_ws.send_json({"action": "add_file_to_ticket", "error": "Access denied"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "add_file_to_ticket", "error": "Access denied"})
         return
 
     ticket_file = TicketFileCreate(
@@ -293,11 +297,13 @@ async def user_add_file_to_ticket(
         "file_size": record.file_size,
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "add_file_to_ticket", "data": record_dict})
 
-    await account_ws.send_json({"action": "add_file_to_ticket", "data": record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "add_file_to_ticket", "data": record_dict})
 
 
 async def user_close_ticket(
@@ -306,16 +312,19 @@ async def user_close_ticket(
         message_service: MessageService,
         item_id: int,
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     ticket_old = await ticket_service.get_by_id(item_id)
     if not ticket_old:
-        await account_ws.send_json({"action": "close_ticket", "error": "Ticket not found"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "close_ticket", "error": "Ticket not found"})
         return
     if ticket_old.user_id != account_id:
-        await account_ws.send_json({"action": "close_ticket", "error": "Access denied"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "close_ticket", "error": "Access denied"})
         return
 
     ticket = TicketUpdate(
@@ -338,12 +347,13 @@ async def user_close_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
-    print(admins_connections)
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "close_ticket", "data": record_dict})
 
-    await account_ws.send_json({"action": "close_ticket", "data": record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "close_ticket", "data": record_dict})
 
     message = MessageCreate(
         text='',
@@ -367,12 +377,13 @@ async def user_close_ticket(
         "created_at": message_record.created_at.isoformat(),
     }
 
-    print(admins_connections)
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
 
-    await account_ws.send_json({"action": "send_message", "data": message_record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "send_message", "data": message_record_dict})
 
 
 async def user_reopen_ticket(
@@ -381,16 +392,19 @@ async def user_reopen_ticket(
         message_service: MessageService,
         item_id: int,
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     ticket_old = await ticket_service.get_by_id(item_id)
     if not ticket_old:
-        await account_ws.send_json({"action": "reopen_ticket", "error": "Ticket not found"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "reopen_ticket", "error": "Ticket not found"})
         return
     if ticket_old.user_id != account_id:
-        await account_ws.send_json({"action": "reopen_ticket", "error": "Access denied"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "reopen_ticket", "error": "Access denied"})
         return
 
     ticket = TicketUpdate(
@@ -413,12 +427,13 @@ async def user_reopen_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
-    print(admins_connections)
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "reopen_ticket", "data": record_dict})
 
-    await account_ws.send_json({"action": "reopen_ticket", "data": record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "reopen_ticket", "data": record_dict})
 
     message = MessageCreate(
         text='',
@@ -441,12 +456,14 @@ async def user_reopen_ticket(
         "created_at": message_record.created_at.isoformat(),
     }
 
-    print(admins_connections)
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
 
-    await account_ws.send_json({"action": "send_message", "data": message_record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+
 
 async def user_send_message(
         account_id: int,
@@ -455,16 +472,19 @@ async def user_send_message(
         text: str,
         ticket_id: int,
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     ticket_old = await ticket_service.get_by_id(ticket_id)
     if not ticket_old:
-        account_ws.send_json({"action": "send_message", "error": "Ticket not found"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "send_message", "error": "Ticket not found"})
         return
     if ticket_old.user_id != account_id:
-        account_ws.send_json({"action": "send_message", "error": "Access denied"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "send_message", "error": "Access denied"})
         return
 
     message = MessageCreate(
@@ -488,11 +508,13 @@ async def user_send_message(
         "created_at": record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": record_dict})
 
-    await account_ws.send_json({"action": "send_message", "data": record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send_json({"action": "send_message", "data": record_dict})
 
 
 async def user_add_file_to_message(
@@ -503,16 +525,19 @@ async def user_add_file_to_message(
         file_name: str,
         file_size: int,
 ):
-    account = users_connections[account_id][1]
-    account_ws = users_connections[account_id][0]
+    account_ws, account = next(((ws, user) for ws, user in users_connections if user['id'] == account_id), None)
     company_id = account["company_id"]
 
     message = await message_service.get_by_id(item_id)
     if not message:
-        await account_ws.send_json({"action": "add_file_to_message", "error": "Message not found"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "add_file_to_message", "error": "Message not found"})
         return
     if message.user_id != account_id:
-        await account_ws.send_json({"action": "add_file_to_message", "error": "Access denied"})
+        for user_ws, user in users_connections:
+            if user['id'] == account_id:
+                await user_ws.send_json({"action": "add_file_to_message", "error": "Access denied"})
         return
 
     message_file = MessageFileCreate(
@@ -524,11 +549,13 @@ async def user_add_file_to_message(
 
     record = await message_service.add_file(message_file)
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send(json.dumps({"action": "add_file_to_message", "data": record}))
 
-    await account_ws.send(json.dumps({"action": "add_file_to_message", "data": record}))
+    for user_ws, user in users_connections:
+        if user['id'] == account_id:
+            await user_ws.send(json.dumps({"action": "add_file_to_message", "data": record}))
 
 
 async def admin_connect_ticket(
@@ -538,15 +565,16 @@ async def admin_connect_ticket(
         token: str,
         item_id: int,
 ):
-    account = admins_connections[account_id][1]
-    account_ws = admins_connections[account_id][0]
+    account_ws, account = next(((ws, admin) for ws, admin in admins_connections if admin['id'] == account_id), None)
     account_companies = account["companies"]
     account_companies_ids = [company['id'] for company in account_companies]
 
     ticket_old = await ticket_service.get_by_id(item_id)
     user = None
     if not ticket_old:
-        await account_ws.send_json({"action": "connect_ticket", "error": "Ticket not found"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "connect_ticket", "error": "Ticket not found"})
         return
     try:
         async with httpx.AsyncClient() as client:
@@ -558,12 +586,16 @@ async def admin_connect_ticket(
             response.raise_for_status()
             user = response.json()
     except (httpx.HTTPStatusError, httpx.RequestError, Exception):
-        await account_ws.send_json({"action": "connect_ticket", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "connect_ticket", "error": "Cannot get user"})
         return
 
     company_id = user["company_id"]
     if user['company_id'] not in account_companies_ids:
-        await account_ws.send_json({"action": "connect_ticket", "error": "Access denied"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "connect_ticket", "error": "Access denied"})
 
     ticket = TicketUpdate(
         title=ticket_old.title,
@@ -585,12 +617,11 @@ async def admin_connect_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "connect_ticket", "data": record_dict})
-    if users_connections.get(record.user_id):
-        user_ws = users_connections[record.user_id][0]
-        if user_ws:
+    for user_ws, user in users_connections:
+        if user['id'] == record.user_id:
             await user_ws.send_json({"action": "connect_ticket", "data": record_dict})
 
     message = MessageCreate(
@@ -616,12 +647,13 @@ async def admin_connect_ticket(
         "created_at": message_record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
-    if users_connections.get(message_record_dict['user_id']):
-        user_ws = users_connections[message_record.user_id][0]
-        await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == message_record.user_id:
+            await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+
 
 async def admin_disconnect_ticket(
         account_id: int,
@@ -630,15 +662,16 @@ async def admin_disconnect_ticket(
         token: str,
         item_id: int,
 ):
-    account = admins_connections[account_id][1]
-    account_ws = admins_connections[account_id][0]
+    account_ws, account = next(((ws, admin) for ws, admin in admins_connections if admin['id'] == account_id), None)
     account_companies = account["companies"]
     account_companies_ids = [company['id'] for company in account_companies]
 
     ticket_old = await ticket_service.get_by_id(item_id)
     user = None
     if not ticket_old:
-        await account_ws.send_json({"action": "disconnect_ticket", "error": "Ticket not found"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "disconnect_ticket", "error": "Ticket not found"})
         return
     try:
         async with httpx.AsyncClient() as client:
@@ -650,12 +683,16 @@ async def admin_disconnect_ticket(
             response.raise_for_status()
             user = response.json()
     except (httpx.HTTPStatusError, httpx.RequestError, Exception):
-        await account_ws.send_json({"action": "disconnect_ticket", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "disconnect_ticket", "error": "Cannot get user"})
         return
 
     company_id = user["company_id"]
     if user['company_id'] not in account_companies_ids:
-        await account_ws.send_json({"action": "disconnect_ticket", "error": "Access denied"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "disconnect_ticket", "error": "Access denied"})
 
     ticket = TicketUpdate(
         title=ticket_old.title,
@@ -677,12 +714,11 @@ async def admin_disconnect_ticket(
         "created_at": record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "disconnect_ticket", "data": record_dict})
-    if users_connections.get(record.user_id):
-        user_ws = users_connections[record.user_id][0]
-        if user_ws:
+    for user_ws, user in users_connections:
+        if user['id'] == record.user_id:
             await user_ws.send_json({"action": "disconnect_ticket", "data": record_dict})
 
     message = MessageCreate(
@@ -708,12 +744,13 @@ async def admin_disconnect_ticket(
         "created_at": message_record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
-    if users_connections.get(message_record_dict['user_id']):
-        user_ws = users_connections[message_record.user_id][0]
-        await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+    for user_ws, user in users_connections:
+        if user['id'] == message_record.user_id:
+            await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+
 
 async def admin_set_ticket_status(
         account_id: int,
@@ -723,14 +760,15 @@ async def admin_set_ticket_status(
         item_id: int,
         status: int,
 ):
-    account = admins_connections[account_id][1]
-    account_ws = admins_connections[account_id][0]
+    account_ws, account = next(((ws, admin) for ws, admin in admins_connections if admin['id'] == account_id), None)
     account_companies = account["companies"]
     account_companies_ids = [company['id'] for company in account_companies]
 
     ticket_old = await ticket_service.get_by_id(item_id)
     if not ticket_old:
-        await account_ws.send_json({"action": "set_ticket_status", "error": "Ticket not found"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "set_ticket_status", "error": "Ticket not found"})
         return
 
     try:
@@ -743,12 +781,17 @@ async def admin_set_ticket_status(
             response.raise_for_status()
             user = response.json()
     except (httpx.HTTPStatusError, httpx.RequestError, Exception):
-        await account_ws.send_json({"action": "assign_ticket", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "assign_ticket", "error": "Cannot get user"})
         return
 
     company_id = user["company_id"]
     if company_id not in account_companies_ids:
-        await account_ws.send_json({"action": "set_ticket_status", "error": "Access denied"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "set_ticket_status", "error": "Access denied"})
+        return
 
     ticket = TicketUpdate(
         title=ticket_old.title,
@@ -770,12 +813,11 @@ async def admin_set_ticket_status(
         "created_at": record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "set_ticket_status", "data": record_dict})
-    if users_connections.get(record.user_id):
-        user_ws = users_connections[record.user_id][0]
-        if user_ws:
+    for user_ws, user in users_connections:
+        if user['id'] == record.user_id:
             await user_ws.send_json({"action": "set_ticket_status", "data": record_dict})
 
     match status:
@@ -803,9 +845,10 @@ async def admin_set_ticket_status(
                 solved=True,
             )
         case _:
-            await account_ws.send_json({"action": "set_ticket_status", "error": "Unknown status"})
+            for admin_ws, admin in admins_connections:
+                if admin['id'] == account_id:
+                    await admin_ws.send_json({"action": "set_ticket_status", "error": "Unknown status"})
             return
-
 
     message_record = await message_service.create(message)
 
@@ -822,13 +865,13 @@ async def admin_set_ticket_status(
         "created_at": message_record.created_at.isoformat(),
     }
 
-    for admin_ws, admin in admins_connections.values():
+    for admin_ws, admin in admins_connections:
         if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": message_record_dict})
-    if users_connections.get(record.user_id):
-        user_ws = users_connections[record.user_id][0]
-        if user_ws:
+    for user_ws, user in users_connections:
+        if user['id'] == message_record.user_id:
             await user_ws.send_json({"action": "send_message", "data": message_record_dict})
+
 
 async def admin_send_message(
         account_id: int,
@@ -839,18 +882,21 @@ async def admin_send_message(
         user_id: int,
         ticket_id: int,
 ):
-    account = admins_connections[account_id][1]
-    account_ws = admins_connections[account_id][0]
+    account_ws, account = next(((ws, admin) for ws, admin in admins_connections if admin['id'] == account_id), None)
     account_companies = account["companies"]
     account_companies_ids = [company['id'] for company in account_companies]
 
     ticket_old = await ticket_service.get_by_id(ticket_id)
     if not ticket_old:
-        await account_ws.send_json({"action": "send_message", "error": "Ticket not found"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Ticket not found"})
         return
     user = None
     if not ticket_old:
-        await account_ws.send_json({"action": "send_message", "error": "Ticket not found"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Ticket not found"})
         return
 
     try:
@@ -863,17 +909,27 @@ async def admin_send_message(
             response.raise_for_status()
             user = response.json()
     except httpx.HTTPStatusError as e:
-        await account_ws.send_json({"action": "send_message", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Cannot get user"})
     except httpx.RequestError as e:
-        await account_ws.send_json({"action": "send_message", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Cannot get user"})
     except Exception as e:
-        await account_ws.send_json({"action": "send_message", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Cannot get user"})
     if not user:
-        await account_ws.send_json({"action": "send_message", "error": "Cannot get user"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Cannot get user"})
 
     company_id = user["company_id"]
     if user['company_id'] not in account_companies_ids:
-        await account_ws.send_json({"action": "send_message", "error": "Access denied"})
+        for admin_ws, admin in admins_connections:
+            if admin['id'] == account_id:
+                await admin_ws.send_json({"action": "send_message", "error": "Access denied"})
 
     message = MessageCreate(
         text=text,
@@ -897,57 +953,54 @@ async def admin_send_message(
         "created_at": record.created_at.isoformat(),
     }
 
-    for i in admins_connections:
-        admin_ws = admins_connections[i][0]
-        admin = admins_connections[i][1]
-        admin_companies = admin["companies"]
-        admin_companies_ids = [company['id'] for company in admin_companies]
-        if company_id in admin_companies_ids:
+    for admin_ws, admin in admins_connections:
+        if company_id in {company['id'] for company in admin['companies']}:
             await admin_ws.send_json({"action": "send_message", "data": record_dict})
-    if users_connections.get(record.user_id):
-        user_ws = users_connections[record.user_id][0]
-        if user_ws:
+    for user_ws, user in users_connections:
+        if user['id'] == record.user_id:
             await user_ws.send_json({"action": "send_message", "data": record_dict})
 
-async def admin_add_file_to_message(
-        account_id: int,
-        message_service: MessageService,
-        item_id: int,
-        file_uuid: str,
-        file_name: str,
-        file_size: int,
-):
-    account = admins_connections[account_id][1]
-    account_ws = admins_connections[account_id][0]
-    account_companies = account["companies"]
-    account_companies_ids = [company['id'] for company in account_companies]
 
-    message = await message_service.get_by_id(item_id)
-    if not message:
-        await account_ws.send_json({"action": "add_file_to_message", "error": "Message not found"})
-        return
-
-    user = users_connections[message['user_id']][1]
-    user_ws = users_connections[message['user_id']][0]
-    company_id = user["company_id"]
-    if user.company_id not in account_companies_ids:
-        await account_ws.send_json({"action": "add_file_to_message", "error": "Access denied"})
-        return
-
-    message_file = MessageFileCreate(
-        item_id=item_id,
-        file_uuid=file_uuid,
-        file_name=file_name,
-        file_size=file_size,
-    )
-
-    record = await message_service.add_file(message_file)
-
-    for i in admins_connections:
-        admin_ws = users_connections[i][0]
-        admin = users_connections[i][1]
-        admin_companies = admin["companies"]
-        admin_companies_ids = [company['id'] for company in admin_companies]
-        if company_id in admin_companies_ids:
-            await admin_ws.send_json({"action": "add_file_to_message", "data": record})
-    await user_ws.send(json.dumps({"action": "add_file_to_message", "data": record}))
+# async def admin_add_file_to_message(
+#         account_id: int,
+#         message_service: MessageService,
+#         item_id: int,
+#         file_uuid: str,
+#         file_name: str,
+#         file_size: int,
+# ):
+#     account_ws, account = next((ws, admin for ws, admin in admins_connections if admin['id'] == account_id), None)
+#     account_companies = account["companies"]
+#     account_companies_ids = [company['id'] for company in account_companies]
+#
+#     message = await message_service.get_by_id(item_id)
+#     if not message:
+#         for admin_ws, admin in admins_connections:
+#             if admin['id'] == account_id:
+#                 await admin_ws.send_json({"action": "add_file_to_message", "error": "Message not found"})
+#         return
+#
+#     for user_ws, user in users_connections:
+#         if user['id'] == message['user_id']:
+#             company_id = user["company_id"]
+#             if user.company_id not in account_companies_ids:
+#                 for admin_ws, admin in admins_connections:
+#                     if admin['id'] == account_id:
+#                         await admin_ws.send_json({"action": "add_file_to_message", "error": "Access denied"})
+#                 return
+#
+#     message_file = MessageFileCreate(
+#         item_id=item_id,
+#         file_uuid=file_uuid,
+#         file_name=file_name,
+#         file_size=file_size,
+#     )
+#
+#     record = await message_service.add_file(message_file)
+#
+#     for admin_ws, admin in admins_connections:
+#         if company_id in {company['id'] for company in admin['companies']}:
+#             await admin_ws.send_json({"action": "add_file_to_message", "data": record})
+#     for user_ws, user in users_connections:
+#         if user['id'] == record.user_id:
+#             await user_ws.send(json.dumps({"action": "add_file_to_message", "data": record}))
